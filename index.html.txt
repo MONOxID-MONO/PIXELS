@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Beach Adventures: Shell Dash</title>
+    <style>
+        body { background: #1a1a1a; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; font-family: 'Courier New', Courier, monospace; color: white; overflow: hidden; }
+        #container { position: relative; width: 600px; height: 400px; }
+        canvas { border: 6px solid #f3e5ab; background: #87CEEB; image-rendering: pixelated; width: 600px; height: 400px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 20px; box-sizing: border-box; pointer-events: none; z-index: 10; }
+        .controls { margin-top: 10px; color: #aaa; font-size: 14px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="ui">
+            <div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: bold; text-shadow: 2px 2px #000;">
+                <div id="hpDisplay">HP: ❤️❤️❤️❤️</div>
+                <div id="shellDisplay">🐚 0/10</div>
+            </div>
+            <div id="msg" style="margin-top: 150px; text-align: center; font-size: 24px; text-shadow: 2px 2px #000;">LOADING ASSETS...</div>
+        </div>
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+    </div>
+    <div class="controls">SPACE to Jump/Start | DOWN ARROW to Duck</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const msgEl = document.getElementById('msg');
+const hpEl = document.getElementById('hpDisplay');
+const shellEl = document.getElementById('shellDisplay');
+
+// --- ASSET CONFIG ---
+// NOTE: Use direct image links (ending in .jpg/.png)
+const imgUrls = {
+    player: 'LINK_TO_GEMINI_SHELLS1', 
+    crab: 'LINK_TO_GEMINI_SHELLS6', 
+    gull: 'LINK_TO_GEMINI_SHELLS5', 
+    shell: 'LINK_TO_GEMINI_SHELLS2',
+    surf: 'LINK_TO_GEMINI_SHELLS4'
+};
+
+const images = {};
+let loadedImages = 0;
+const totalImages = Object.keys(imgUrls).length;
+
+function loadAssets() {
+    for (let key in imgUrls) {
+        images[key] = new Image();
+        images[key].crossOrigin = "anonymous"; // Helps with CodePen CORS issues
+        images[key].onload = () => {
+            loadedImages++;
+            if (loadedImages === totalImages) {
+                msgEl.innerText = "PRESS SPACE TO START";
+            }
+        };
+        images[key].src = imgUrls[key];
+    }
+}
+
+// --- GAME STATE ---
+let gameState = 'START';
+let shells = 0;
+let hearts = 4;
+let frame = 0;
+let obstacles = [];
+let items = [];
+
+const player = { x: 50, y: 280, w: 60, h: 70, dy: 0, isJumping: false, isDucking: false };
+
+// --- INPUTS ---
+window.addEventListener('keydown', e => {
+    if (gameState === 'START' && e.code === 'Space' && loadedImages === totalImages) {
+        gameState = 'PLAYING';
+        msgEl.innerText = '';
+    }
+    if ((e.code === 'Space' || e.code === 'ArrowUp') && !player.isJumping && !player.isDucking) {
+        player.dy = -15;
+        player.isJumping = true;
+    }
+    if (e.code === 'ArrowDown') player.isDucking = true;
+});
+
+window.addEventListener('keyup', e => {
+    if (e.code === 'ArrowDown') player.isDucking = false;
+});
+
+// --- CORE LOGIC ---
+function update() {
+    if (gameState !== 'PLAYING') return;
+    frame++;
+
+    // Gravity
+    player.y += player.dy;
+    if (player.y < 280) {
+        player.dy += 0.8;
+    } else {
+        player.y = 280;
+        player.dy = 0;
+        player.isJumping = false;
+    }
+
+    // Spawn Logic
+    if (frame % 120 === 0) items.push({ x: 650, y: 310 });
+    if (frame % 90 === 0) {
+        let isGull = Math.random() > 0.5;
+        obstacles.push({ x: 650, y: isGull ? 210 : 310, type: isGull ? 'gull' : 'crab' });
+    }
+
+    // Move & Collision
+    items.forEach((item, i) => {
+        item.x -= 4;
+        if (Math.abs(player.x - item.x) < 40 && Math.abs(player.y - item.y) < 40) {
+            shells++;
+            shellEl.innerText = `🐚 ${shells}/10`;
+            items.splice(i, 1);
+            if (shells >= 10) gameState = 'SURFING';
+        }
+    });
+
+    obstacles.forEach((obs, i) => {
+        obs.x -= 6;
+        let hitX = Math.abs(player.x - obs.x) < 40;
+        let hitY = obs.type === 'crab' ? !player.isJumping : !player.isDucking;
+        
+        if (hitX && hitY) {
+            hearts--;
+            obstacles.splice(i, 1);
+            hpEl.innerText = "HP: " + "❤️".repeat(hearts);
+            if (hearts <= 0) {
+                gameState = 'GAMEOVER';
+                msgEl.innerText = "GAME OVER - PRESS CMD+R";
+            }
+        }
+    });
+}
+
+function draw() {
+    ctx.clearRect(0, 0, 600, 400);
+
+    // Background Layers
+    ctx.fillStyle = '#87CEEB'; ctx.fillRect(0, 0, 600, 250); // Sky
+    ctx.fillStyle = '#0077be'; ctx.fillRect(0, 250, 600, 80); // Sea
+    ctx.fillStyle = '#f3e5ab'; ctx.fillRect(0, 330, 600, 70); // Sand
+
+    if (gameState === 'SURFING') {
+        ctx.drawImage(images.surf, 0, 0, 600, 400);
+        msgEl.innerHTML = "SURFBOARD ACQUIRED!<br>YOU WIN!";
+        return;
+    }
+
+    // Draw Player (with ducking logic)
+    if (loadedImages === totalImages) {
+        let pHeight = player.isDucking ? player.h * 0.6 : player.h;
+        let pY = player.isDucking ? player.y + (player.h * 0.4) : player.y;
+        ctx.drawImage(images.player, player.x, pY, player.w, pHeight);
+
+        // Draw Obstacles
+        obstacles.forEach(o => {
+            ctx.drawImage(images[o.type], o.x, o.y, 50, 50);
+        });
+
+        // Draw Shells
+        items.forEach(s => {
+            ctx.drawImage(images.shell, s.x, s.y, 35, 35);
+        });
+    }
+
+    update();
+    requestAnimationFrame(draw);
+}
+
+// Initialize
+loadAssets();
+draw();
+</script>
+</body>
+</html>
